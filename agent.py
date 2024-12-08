@@ -164,7 +164,7 @@ class Agent():
         )
         inputs = {
             'query': query,
-            'url': 'https://www.baidu.com/s?wd='+query.replace(" ", "+")
+            'url': 'https://www.so.com/s?q='+query.replace(" ", "+")
         }
         return llm_request_chain.invoke(inputs)
 
