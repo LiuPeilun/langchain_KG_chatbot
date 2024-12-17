@@ -10,9 +10,10 @@ from langchain_core.prompts import PromptTemplate
 from langchain_chroma import Chroma
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
-from langchain.agents import ZeroShotAgent, AgentExecutor, Tool
+from langchain.agents import ZeroShotAgent, AgentExecutor, Tool, create_react_agent
 from langchain.memory import ConversationBufferMemory
 from langchain.output_parsers import ResponseSchema, StructuredOutputParser
+from langchain import hub
 
 
 class Agent():
@@ -25,7 +26,7 @@ class Agent():
 
     # 定义Tool函数
     # --大模型本身
-    def generic_func(self, query):
+    def generic_func(self, x, query):
         prompt = PromptTemplate.from_template(
             template=GENERIC_PROMPT_TPL
         )
@@ -38,7 +39,7 @@ class Agent():
         return llm_chain.invoke(query)['text']
 
     # --大模型+向量数据库检索
-    def retrival_func(self, query):
+    def retrival_func(self, x, query):
         # 召回
         documents = self.db.similarity_search_with_relevance_scores(query, k=3)
         # 过滤低相似度召回文本 doc[0]召回文本内容  doc[1]召回文本的相似度分数
@@ -69,7 +70,7 @@ class Agent():
             ResponseSchema(type='list', name='drug', description='药物名称实体'),
         ]
 
-        output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
+        output_parser = StructuredOutputParser.from_response_schemas(response_schemas=response_schemas)
         format_instructions = structured_output_parser(response_schemas)
 
         prompt = PromptTemplate(
@@ -85,7 +86,7 @@ class Agent():
         )
 
         # 完成命名实体识别
-        result = llm_chain.invoke(query)['text']
+        result = llm_chain.invoke({'query': query})['text']
         result = output_parser.parse(result)
 
         # 要将命名实体识别出的实体，添加到模板中，而后才能根据模板中新组成的问题进行数据库检索及后续问答
@@ -166,7 +167,7 @@ class Agent():
             'query': query,
             'url': 'https://www.so.com/s?q='+query.replace(" ", "+")
         }
-        return llm_request_chain.invoke(inputs)
+        return llm_request_chain.invoke(inputs)['output']
 
     # 问题入口，在这里定义多种tool以供选择
     def query(self, query):
@@ -194,39 +195,54 @@ class Agent():
         ]
 
         # 构建agent
-        prefix = """请用中文，尽你所能回答以下问题。你可以使用以下工具："""
-        suffix = """Begin!
-        
-        History:{chat_history}
-        Question:{input}
-        Thought:{agent_scratchpad}
-        """
-        agent_prompt = ZeroShotAgent.create_prompt(
-            tools=tools,
-            prefix=prefix,
-            suffix=suffix,
-            input_variables=['chat_history', 'input', 'agent_scratchpad']
-        )
+        # prefix = """请用中文，尽你所能回答以下问题。你可以使用以下工具："""
+        # suffix = """Begin!
+        #
+        # History:{chat_history}
+        # Question:{input}
+        # Thought:{agent_scratchpad}
+        # """
+        # agent_prompt = ZeroShotAgent.create_prompt(
+        #     tools=tools,
+        #     prefix=prefix,
+        #     suffix=suffix,
+        #     input_variables=['chat_history', 'input', 'agent_scratchpad']
+        # )
+        #
+        # llm_chain = LLMChain(
+        #     llm=get_llm_model(),
+        #     prompt=agent_prompt
+        # )
+        #
+        # agent = ZeroShotAgent(llm_chain=llm_chain)
+        #
+        # memory = ConversationBufferMemory(memory_key='chat_history')
+        #
+        # agent_chain = AgentExecutor.from_agent_and_tools(
+        #     agent=agent,
+        #     tools=tools,
+        #     memory=memory,
+        #     verbose=os.getenv('VERBOSE')
+        # )
+        # result = agent_chain.invoke({'input': query})['output']
+        # return result
 
-        llm_chain = LLMChain(
-            llm=get_llm_model(),
-            prompt=agent_prompt
-        )
-
-        agent = ZeroShotAgent(llm_chain=llm_chain)
-
+        prompt = hub.pull('hwchase17/react-chat')
+        prompt.template = '请用中文回答问题！Final Answer 必须尊重 Obversion 的结果，不能改变语义。\n\n' + prompt.template
+        agent = create_react_agent(llm=get_llm_model(), tools=tools, prompt=prompt)
         memory = ConversationBufferMemory(memory_key='chat_history')
-
-        agent_chain = AgentExecutor.from_agent_and_tools(
+        agent_executor = AgentExecutor.from_agent_and_tools(
             agent=agent,
             tools=tools,
             memory=memory,
+            handle_parsing_errors=True,
             verbose=os.getenv('VERBOSE')
         )
-        return agent_chain.invoke({'input': query})
+        return agent_executor.invoke({"input": query})['output']
 
 
 # agent = Agent()
-# print(agent.query('你好'))
+# print(agent.query('你好你是谁'))
+# print(agent.generic_func('', '你好你是谁'))
 # print(agent.query('寻医问药网获得过哪些投资？'))
 # print(agent.query('鼻炎和感冒是并发症吗？'))

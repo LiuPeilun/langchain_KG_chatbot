@@ -35,8 +35,8 @@ class Service():
         return self.agent.query(message)
 
 
-if __name__ == '__main__':
-    service = Service()
-    print(service.answer(
-        '得了鼻炎怎么办', [['你好', '你好，有什么可以帮助你的吗']]
-    ))
+# if __name__ == '__main__':
+#     service = Service()
+#     print(service.answer(
+#         '得了鼻炎怎么办', [['你好', '你好，有什么可以帮助你的吗']]
+#     ))
