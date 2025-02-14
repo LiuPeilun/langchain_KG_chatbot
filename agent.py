@@ -167,6 +167,7 @@ class Agent():
             'query': query,
             'url': 'https://www.so.com/s?q='+query.replace(" ", "+")
         }
+
         return llm_request_chain.invoke(inputs)['output']
 
     # 问题入口，在这里定义多种tool以供选择
